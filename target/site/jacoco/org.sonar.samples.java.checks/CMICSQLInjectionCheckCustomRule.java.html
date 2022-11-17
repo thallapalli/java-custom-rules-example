@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CMICSQLInjectionCheckCustomRule.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SonarQube Java :: Documentation :: Custom Rules Example</a> &gt; <a href="index.source.html" class="el_package">org.sonar.samples.java.checks</a> &gt; <span class="el_source">CMICSQLInjectionCheckCustomRule.java</span></div><h1>CMICSQLInjectionCheckCustomRule.java</h1><pre class="source lang-java linenums">package org.sonar.samples.java.checks;
+
+import static org.sonar.java.checks.helpers.ReassignmentFinder.getInitializerOrExpression;
+import static org.sonar.java.checks.helpers.ReassignmentFinder.getReassignments;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import javax.annotation.Nullable;
+
+import org.sonar.check.Rule;
+import org.sonar.plugins.java.api.IssuableSubscriptionVisitor;
+import org.sonar.plugins.java.api.JavaFileScannerContext;
+import org.sonar.plugins.java.api.semantic.MethodMatchers;
+import org.sonar.plugins.java.api.semantic.Symbol;
+import org.sonar.plugins.java.api.tree.AssignmentExpressionTree;
+import org.sonar.plugins.java.api.tree.ExpressionTree;
+import org.sonar.plugins.java.api.tree.IdentifierTree;
+import org.sonar.plugins.java.api.tree.MethodInvocationTree;
+import org.sonar.plugins.java.api.tree.NewClassTree;
+import org.sonar.plugins.java.api.tree.Tree;
+import org.sonar.plugins.java.api.tree.Tree.Kind;
+
+@Rule(key = &quot;CMICSQLInjectionCheckCustomRule&quot;)
+<span class="nc" id="L28">public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor {</span>
+	private static final String JAVA_SQL_CALLABLESTATEMENT = &quot;java.sql.CallableStatement&quot;;
+	private static final String MAIN_MESSAGE = &quot;Make sure using a dynamically formatted SQL query is safe here. This is CMIC Message &quot;;
+
+	@Override
+	public List&lt;Kind&gt; nodesToVisit() {
+		// TODO Auto-generated method stub
+<span class="nc" id="L35">		return Collections.singletonList(Tree.Kind.CLASS);</span>
+	}
+
+<span class="nc" id="L38">	private static final MethodMatchers SQL_INJECTION_SUSPECTS = MethodMatchers.or(</span>
+
+<span class="nc" id="L40">			MethodMatchers.create().ofSubTypes(JAVA_SQL_CALLABLESTATEMENT)</span>
+<span class="nc" id="L41">					.names(&quot;executeQuery&quot;, &quot;execute&quot;, &quot;executeUpdate&quot;, &quot;executeLargeUpdate&quot;, &quot;addBatch&quot;)</span>
+<span class="nc" id="L42">					.withAnyParameters().build());</span>
+
+	@Override
+	public void visitNode(Tree tree) {
+<span class="nc bnc" id="L46" title="All 2 branches missed.">		if (anyMatch(tree)) {</span>
+<span class="nc" id="L47">			Optional&lt;ExpressionTree&gt; sqlStringArg = arguments(tree)</span>
+<span class="nc" id="L48">					.filter(arg -&gt; arg.symbolType().is(&quot;java.lang.String&quot;)).findFirst();</span>
+
+<span class="nc bnc" id="L50" title="All 2 branches missed.">			if (sqlStringArg.isPresent()) {</span>
+<span class="nc" id="L51">				ExpressionTree sqlArg = sqlStringArg.get();</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">				if (isDynamicConcatenation(sqlArg)) {</span>
+<span class="nc" id="L53">					reportIssue(sqlArg, MAIN_MESSAGE);</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">				} else if (sqlArg.is(Tree.Kind.IDENTIFIER)) {</span>
+<span class="nc" id="L55">					IdentifierTree identifierTree = (IdentifierTree) sqlArg;</span>
+<span class="nc" id="L56">					Symbol symbol = identifierTree.symbol();</span>
+<span class="nc" id="L57">					ExpressionTree initializerOrExpression = getInitializerOrExpression(symbol.declaration());</span>
+<span class="nc" id="L58">					List&lt;AssignmentExpressionTree&gt; reassignments = getReassignments(symbol.owner().declaration(),</span>
+<span class="nc" id="L59">							symbol.usages());</span>
+
+<span class="nc bnc" id="L61" title="All 4 branches missed.">					if ((initializerOrExpression != null &amp;&amp; isDynamicConcatenation(initializerOrExpression))</span>
+<span class="nc" id="L62">							|| reassignments.stream()</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">									.anyMatch(CMICSQLInjectionCheckCustomRule::isDynamicPlusAssignment)) {</span>
+<span class="nc" id="L64">						reportIssue(sqlArg, MAIN_MESSAGE,</span>
+<span class="nc" id="L65">								secondaryLocations(initializerOrExpression, reassignments, identifierTree.name()),</span>
+								null);
+					}
+				}
+			}
+		}
+<span class="nc" id="L71">	}</span>
+
+	private static List&lt;JavaFileScannerContext.Location&gt; secondaryLocations(
+			@Nullable ExpressionTree initializerOrExpression, List&lt;AssignmentExpressionTree&gt; reassignments,
+			String identifierName) {
+<span class="nc" id="L76">		List&lt;JavaFileScannerContext.Location&gt; secondaryLocations = reassignments.stream()</span>
+<span class="nc" id="L77">				.map(assignment -&gt; new JavaFileScannerContext.Location(</span>
+<span class="nc" id="L78">						String.format(&quot;SQL Query is assigned to '%s'&quot;, getVariableName(assignment)),</span>
+<span class="nc" id="L79">						assignment.expression()))</span>
+<span class="nc" id="L80">				.collect(Collectors.toList());</span>
+
+<span class="nc bnc" id="L82" title="All 2 branches missed.">		if (initializerOrExpression != null) {</span>
+<span class="nc" id="L83">			secondaryLocations.add(new JavaFileScannerContext.Location(</span>
+<span class="nc" id="L84">					String.format(&quot;SQL Query is dynamically formatted and assigned to '%s'&quot;, identifierName),</span>
+					initializerOrExpression));
+		}
+<span class="nc" id="L87">		return secondaryLocations;</span>
+	}
+
+	private static String getVariableName(AssignmentExpressionTree assignment) {
+<span class="nc" id="L91">		ExpressionTree variable = assignment.variable();</span>
+<span class="nc" id="L92">		return ((IdentifierTree) variable).name();</span>
+	}
+
+	private static Stream&lt;ExpressionTree&gt; arguments(Tree methodTree) {
+<span class="nc bnc" id="L96" title="All 2 branches missed.">		if (methodTree.is(Tree.Kind.METHOD_INVOCATION)) {</span>
+<span class="nc" id="L97">			return ((MethodInvocationTree) methodTree).arguments().stream();</span>
+		}
+<span class="nc bnc" id="L99" title="All 2 branches missed.">		if (methodTree.is(Tree.Kind.NEW_CLASS)) {</span>
+<span class="nc" id="L100">			return ((NewClassTree) methodTree).arguments().stream();</span>
+		}
+<span class="nc" id="L102">		return Stream.empty();</span>
+	}
+
+	private static boolean anyMatch(Tree tree) {
+<span class="nc bnc" id="L106" title="All 2 branches missed.">		if (!hasArguments(tree)) {</span>
+<span class="nc" id="L107">			return false;</span>
+		}
+<span class="nc bnc" id="L109" title="All 2 branches missed.">		if (tree.is(Tree.Kind.NEW_CLASS)) {</span>
+<span class="nc" id="L110">			return SQL_INJECTION_SUSPECTS.matches((NewClassTree) tree);</span>
+		}
+<span class="nc bnc" id="L112" title="All 2 branches missed.">		if (tree.is(Tree.Kind.METHOD_INVOCATION)) {</span>
+<span class="nc" id="L113">			return SQL_INJECTION_SUSPECTS.matches((MethodInvocationTree) tree);</span>
+		}
+<span class="nc" id="L115">		return false;</span>
+	}
+
+	private static boolean hasArguments(Tree tree) {
+<span class="nc" id="L119">		return arguments(tree).findAny().isPresent();</span>
+	}
+
+	private static boolean isDynamicPlusAssignment(ExpressionTree arg) {
+<span class="nc bnc" id="L123" title="All 2 branches missed.">		return arg.is(Tree.Kind.PLUS_ASSIGNMENT)</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">				&amp;&amp; !((AssignmentExpressionTree) arg).expression().asConstant().isPresent();</span>
+	}
+
+	private static boolean isDynamicConcatenation(ExpressionTree arg) {
+<span class="nc bnc" id="L128" title="All 4 branches missed.">		return arg.is(Tree.Kind.PLUS) &amp;&amp; !arg.asConstant().isPresent();</span>
+	}
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>
