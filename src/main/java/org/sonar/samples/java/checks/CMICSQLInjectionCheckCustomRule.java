@@ -3,6 +3,7 @@ package org.sonar.samples.java.checks;
 import static org.sonar.java.checks.helpers.ReassignmentFinder.getInitializerOrExpression;
 import static org.sonar.java.checks.helpers.ReassignmentFinder.getReassignments;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -29,11 +30,10 @@ public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor
 	private static final String JAVA_SQL_CALLABLESTATEMENT = "java.sql.CallableStatement";
 	private static final String MAIN_MESSAGE = "Make sure using a dynamically formatted SQL query is safe here. This is CMIC Message ";
 
-	@Override
-	public List<Kind> nodesToVisit() {
-		// TODO Auto-generated method stub
-		return Collections.singletonList(Tree.Kind.CLASS);
-	}
+	 @Override
+	  public List<Tree.Kind> nodesToVisit() {
+	    return Arrays.asList(Tree.Kind.METHOD_INVOCATION, Tree.Kind.NEW_CLASS);
+	  }
 
 	private static final MethodMatchers SQL_INJECTION_SUSPECTS = MethodMatchers.or(
 
