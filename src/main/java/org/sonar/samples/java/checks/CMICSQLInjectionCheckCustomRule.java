@@ -4,7 +4,6 @@ import static org.sonar.java.checks.helpers.ReassignmentFinder.getInitializerOrE
 import static org.sonar.java.checks.helpers.ReassignmentFinder.getReassignments;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -23,7 +22,6 @@ import org.sonar.plugins.java.api.tree.IdentifierTree;
 import org.sonar.plugins.java.api.tree.MethodInvocationTree;
 import org.sonar.plugins.java.api.tree.NewClassTree;
 import org.sonar.plugins.java.api.tree.Tree;
-import org.sonar.plugins.java.api.tree.Tree.Kind;
 
 @Rule(key = "CMICSQLInjectionCheckCustomRule")
 public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor {
