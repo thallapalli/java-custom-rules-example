@@ -1,14 +1,14 @@
 package org.sonar.samples.java.checks;
 
-import static org.sonar.java.checks.helpers.ReassignmentFinder.getInitializerOrExpression;
-import static org.sonar.java.checks.helpers.ReassignmentFinder.getReassignments;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 import org.sonar.check.Rule;
@@ -17,16 +17,18 @@ import org.sonar.plugins.java.api.JavaFileScannerContext;
 import org.sonar.plugins.java.api.semantic.MethodMatchers;
 import org.sonar.plugins.java.api.semantic.Symbol;
 import org.sonar.plugins.java.api.tree.AssignmentExpressionTree;
+import org.sonar.plugins.java.api.tree.EnumConstantTree;
 import org.sonar.plugins.java.api.tree.ExpressionTree;
 import org.sonar.plugins.java.api.tree.IdentifierTree;
 import org.sonar.plugins.java.api.tree.MethodInvocationTree;
 import org.sonar.plugins.java.api.tree.NewClassTree;
 import org.sonar.plugins.java.api.tree.Tree;
+import org.sonar.plugins.java.api.tree.VariableTree;
 
 @Rule(key = "CMICSQLInjectionCheckCustomRule")
 public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor {
 	private static final String JAVA_SQL_CALLABLESTATEMENT = "java.sql.CallableStatement";
-	private static final String MAIN_MESSAGE = "Make sure using a dynamically formatted SQL query is safe here. This is CMIC Message ";
+	private static final String MAIN_MESSAGE = "SQL Query check, Custom Message Can be updated here";
 
 	 @Override
 	  public List<Tree.Kind> nodesToVisit() {
@@ -42,11 +44,13 @@ public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor
 	@Override
 	public void visitNode(Tree tree) {
 		if (anyMatch(tree)) {
-			Optional<ExpressionTree> sqlStringArg = arguments(tree)
-					.filter(arg -> arg.symbolType().is("java.lang.String")).findFirst();
-
-			if (sqlStringArg.isPresent()) {
-				ExpressionTree sqlArg = sqlStringArg.get();
+			//Optional<ExpressionTree> sqlStringArg = arguments(tree)
+			//		.filter(arg -> arg.symbolType().is("java.lang.String")).findFirst();
+			List<ExpressionTree> listofExpressionTree = arguments(tree).filter(arg -> arg.symbolType().is("java.lang.String")).collect(Collectors.toList());
+			
+			for(ExpressionTree sqlArg:listofExpressionTree ) {
+			//if (sqlStringArg.isPresent()) {
+				//ExpressionTree sqlArg = sqlStringArg.get();
 				if (isDynamicConcatenation(sqlArg)) {
 					reportIssue(sqlArg, MAIN_MESSAGE);
 				} else if (sqlArg.is(Tree.Kind.IDENTIFIER)) {
@@ -125,5 +129,48 @@ public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor
 	private static boolean isDynamicConcatenation(ExpressionTree arg) {
 		return arg.is(Tree.Kind.PLUS) && !arg.asConstant().isPresent();
 	}
+	 public static List<AssignmentExpressionTree> getReassignments(@Nullable Tree ownerDeclaration, List<IdentifierTree> usages) {
+		    if (ownerDeclaration != null) {
+		      List<AssignmentExpressionTree> assignments = new ArrayList<>();
+		      for (IdentifierTree usage : usages) {
+		        checkAssignment(usage).ifPresent(assignments::add);
+		      }
+		      return assignments;
+		    }
+		    return new ArrayList<>();
+		  }
 
+		  private static Optional<AssignmentExpressionTree> checkAssignment(IdentifierTree usage) {
+		    Tree previousTree = usage;
+		    Tree nonParenthesisParent = previousTree.parent();
+
+		    while (nonParenthesisParent.is(Tree.Kind.PARENTHESIZED_EXPRESSION)) {
+		      previousTree = nonParenthesisParent;
+		      nonParenthesisParent = previousTree.parent();
+		    }
+
+		    if (nonParenthesisParent instanceof AssignmentExpressionTree) {
+		      AssignmentExpressionTree assignment = (AssignmentExpressionTree) nonParenthesisParent;
+		      if (assignment.variable().equals(previousTree)) {
+		        return Optional.of(assignment);
+		      }
+		    }
+		    return Optional.empty();
+		  }
+		  @CheckForNull
+		  public static ExpressionTree getInitializerOrExpression(@Nullable Tree tree) {
+		    if (tree == null) {
+		      return null;
+		    }
+		    if (tree.is(Tree.Kind.VARIABLE)) {
+		      return ((VariableTree) tree).initializer();
+		    } else if (tree.is(Tree.Kind.ENUM_CONSTANT)) {
+		      return ((EnumConstantTree) tree).initializer();
+		    } else if (tree instanceof AssignmentExpressionTree) {
+		      // All kinds of Assignment
+		      return ((AssignmentExpressionTree) tree).expression();
+		    }
+		    // Can be other declaration, like class
+		    return null;
+		  }
 }
