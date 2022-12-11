@@ -16,6 +16,7 @@ import org.sonar.samples.java.checks.AvoidSuperClassRule;
 import org.sonar.samples.java.checks.AvoidTreeListRule;
 import org.sonar.samples.java.checks.CMICSQLInjectionCheckCustomRule;
 import org.sonar.samples.java.checks.MyCustomSubscriptionRule;
+import org.sonar.samples.java.checks.MyFirstCustomCheck;
 import org.sonar.samples.java.checks.NoIfStatementInTestsRule;
 import org.sonar.samples.java.checks.SecurityAnnotationMandatoryRule;
 import org.sonar.samples.java.checks.SpringControllerRequestMappingEntityRule;
@@ -45,6 +46,7 @@ public final class RulesList {
       AvoidTreeListRule.class,
       MyCustomSubscriptionRule.class,
       CMICSQLInjectionCheckCustomRule.class,
+      MyFirstCustomCheck.class,
       SecurityAnnotationMandatoryRule.class));
   }
 
