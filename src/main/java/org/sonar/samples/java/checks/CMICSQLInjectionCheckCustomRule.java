@@ -1,6 +1,5 @@
 package org.sonar.samples.java.checks;
 
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -27,30 +26,79 @@ import org.sonar.plugins.java.api.tree.VariableTree;
 
 @Rule(key = "CMICSQLInjectionCheckCustomRule")
 public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor {
-	private static final String JAVA_SQL_CALLABLESTATEMENT = "java.sql.CallableStatement";
-	private static final String MAIN_MESSAGE = "SQL Query check, Custom Message Can be updated here";
-
-	 @Override
-	  public List<Tree.Kind> nodesToVisit() {
-	    return Arrays.asList(Tree.Kind.METHOD_INVOCATION, Tree.Kind.NEW_CLASS);
-	  }
+	private static final String JAVA_SQL_STATEMENT = "java.sql.Statement";
+	private static final String JAVA_SQL_STATEMENT_CALLABLE = "java.sql.CallableStatement";
+	private static final String JAVA_SQL_CONNECTION = "java.sql.Connection";
+	private static final String SPRING_JDBC_OPERATIONS = "org.springframework.jdbc.core.JdbcOperations";
 
 	private static final MethodMatchers SQL_INJECTION_SUSPECTS = MethodMatchers.or(
+			MethodMatchers.create().ofSubTypes("org.hibernate.Session").names("createQuery", "createSQLQuery")
+					.withAnyParameters().build(),
+			MethodMatchers.create().ofSubTypes(JAVA_SQL_STATEMENT)
+					.names("executeQuery", "execute", "executeUpdate", "executeLargeUpdate", "addBatch","createCallableStatement")
+					.withAnyParameters().build(),
+					MethodMatchers.create().ofSubTypes(JAVA_SQL_STATEMENT_CALLABLE)
+					.names("executeQuery", "execute", "executeUpdate", "executeLargeUpdate", "addBatch","createCallableStatement")
+					.withAnyParameters().build(),
+			MethodMatchers.create().ofSubTypes(JAVA_SQL_CONNECTION)
+					.names("prepareStatement", "createCallableStatement", "prepareCall", "nativeSQL")
+					.withAnyParameters().build(),
+			MethodMatchers.create().ofTypes("javax.persistence.EntityManager").names("createNativeQuery", "createQuery")
+					.withAnyParameters().build(),
+			MethodMatchers.create().ofSubTypes(SPRING_JDBC_OPERATIONS)
+					.names("batchUpdate", "execute", "query", "queryForList", "queryForMap", "queryForObject",
+							"queryForRowSet", "queryForInt", "queryForLong", "update")
+					.withAnyParameters().build(),
 
-			MethodMatchers.create().ofSubTypes(JAVA_SQL_CALLABLESTATEMENT)
-					.names("executeQuery", "execute", "executeUpdate", "executeLargeUpdate", "addBatch")
-					.withAnyParameters().build());
+			MethodMatchers.create().ofSubTypes("javax.jdo.PersistenceManager").names("newQuery").withAnyParameters()
+					.build(),
+
+			MethodMatchers.create().ofSubTypes("javax.jdo.Query").names("setFilter", "setGrouping").withAnyParameters()
+					.build(),
+			
+			MethodMatchers.create().ofAnyType().anyName().withAnyParameters().build(),
+			MethodMatchers.create().ofAnyType().anyName().addWithoutParametersMatcher().build(),
+			MethodMatchers.create().ofSubTypes("oracle.jbo.server.ApplicationModuleImpl").anyName().withAnyParameters().build(),
+			MethodMatchers.create().ofTypes("((oracle.jbo.server.ApplicationModuleImpl)applicationModule).getDBTransaction()").anyName().withAnyParameters().build()
+			
+			/**,
+			MethodMatchers.create().ofAnyType().names("createCallableStatement").build(),
+			MethodMatchers.create().ofSubTypes("oracle.jbo.server.ApplicationModuleImpl").anyName().withAnyParameters().build(),
+			MethodMatchers.create().ofSubTypes("oracle.jbo.server.ApplicationModuleImpl").anyName().addWithoutParametersMatcher().build(),
+			MethodMatchers.create().ofSubTypes("oracle.jbo.server.ApplicationModuleImpl").anyName().addWithoutParametersMatcher().build()
+			
+			
+			MethodMatchers.create().ofSubTypes("((oracle.jbo.server.ApplicationModuleImpl)applicationModule).getDBTransaction()").anyName().addWithoutParametersMatcher().build(),
+			MethodMatchers.create().ofTypes("oracle.jbo.server.ApplicationModuleImpl").anyName().addWithoutParametersMatcher().build(),
+			MethodMatchers.create().ofTypes("((oracle.jbo.server.ApplicationModuleImpl)applicationModule).getDBTransaction()").anyName().addWithoutParametersMatcher().build(),
+			MethodMatchers.create().ofTypes("oracle.jbo.server.ApplicationModuleImpl").anyName().withAnyParameters().build(),
+			MethodMatchers.create().ofTypes("((oracle.jbo.server.ApplicationModuleImpl)applicationModule).getDBTransaction()").anyName().withAnyParameters().build()
+			**/
+			
+			
+			
+			
+			
+			
+			
+
+	);
+
+	private static final String MAIN_MESSAGE = "Make sure using a dynamically formatted SQL query is safe here.";
+
+	@Override
+	public List<Tree.Kind> nodesToVisit() {
+		return Arrays.asList(Tree.Kind.METHOD_INVOCATION, Tree.Kind.NEW_CLASS);
+	}
 
 	@Override
 	public void visitNode(Tree tree) {
 		if (anyMatch(tree)) {
-			//Optional<ExpressionTree> sqlStringArg = arguments(tree)
-			//		.filter(arg -> arg.symbolType().is("java.lang.String")).findFirst();
-			List<ExpressionTree> listofExpressionTree = arguments(tree).filter(arg -> arg.symbolType().is("java.lang.String")).collect(Collectors.toList());
-			
-			for(ExpressionTree sqlArg:listofExpressionTree ) {
-			//if (sqlStringArg.isPresent()) {
-				//ExpressionTree sqlArg = sqlStringArg.get();
+			Optional<ExpressionTree> sqlStringArg = arguments(tree)
+					.filter(arg -> arg.symbolType().is("java.lang.String")).findFirst();
+
+			if (sqlStringArg.isPresent()) {
+				ExpressionTree sqlArg = sqlStringArg.get();
 				if (isDynamicConcatenation(sqlArg)) {
 					reportIssue(sqlArg, MAIN_MESSAGE);
 				} else if (sqlArg.is(Tree.Kind.IDENTIFIER)) {
@@ -77,13 +125,13 @@ public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor
 			String identifierName) {
 		List<JavaFileScannerContext.Location> secondaryLocations = reassignments.stream()
 				.map(assignment -> new JavaFileScannerContext.Location(
-						String.format("SQL Query is assigned to '%s'", getVariableName(assignment)),
+						String.format("SQL Query is assigned to '%s' -Custom", getVariableName(assignment)),
 						assignment.expression()))
 				.collect(Collectors.toList());
 
 		if (initializerOrExpression != null) {
 			secondaryLocations.add(new JavaFileScannerContext.Location(
-					String.format("SQL Query is dynamically formatted and assigned to '%s'", identifierName),
+					String.format("SQL Query is dynamically formatted and assigned to '%s' -Custom", identifierName),
 					initializerOrExpression));
 		}
 		return secondaryLocations;
@@ -129,48 +177,51 @@ public class CMICSQLInjectionCheckCustomRule extends IssuableSubscriptionVisitor
 	private static boolean isDynamicConcatenation(ExpressionTree arg) {
 		return arg.is(Tree.Kind.PLUS) && !arg.asConstant().isPresent();
 	}
-	 public static List<AssignmentExpressionTree> getReassignments(@Nullable Tree ownerDeclaration, List<IdentifierTree> usages) {
-		    if (ownerDeclaration != null) {
-		      List<AssignmentExpressionTree> assignments = new ArrayList<>();
-		      for (IdentifierTree usage : usages) {
-		        checkAssignment(usage).ifPresent(assignments::add);
-		      }
-		      return assignments;
-		    }
-		    return new ArrayList<>();
-		  }
 
-		  private static Optional<AssignmentExpressionTree> checkAssignment(IdentifierTree usage) {
-		    Tree previousTree = usage;
-		    Tree nonParenthesisParent = previousTree.parent();
+	public static List<AssignmentExpressionTree> getReassignments(@Nullable Tree ownerDeclaration,
+			List<IdentifierTree> usages) {
+		if (ownerDeclaration != null) {
+			List<AssignmentExpressionTree> assignments = new ArrayList<>();
+			for (IdentifierTree usage : usages) {
+				checkAssignment(usage).ifPresent(assignments::add);
+			}
+			return assignments;
+		}
+		return new ArrayList<>();
+	}
 
-		    while (nonParenthesisParent.is(Tree.Kind.PARENTHESIZED_EXPRESSION)) {
-		      previousTree = nonParenthesisParent;
-		      nonParenthesisParent = previousTree.parent();
-		    }
+	private static Optional<AssignmentExpressionTree> checkAssignment(IdentifierTree usage) {
+		Tree previousTree = usage;
+		Tree nonParenthesisParent = previousTree.parent();
 
-		    if (nonParenthesisParent instanceof AssignmentExpressionTree) {
-		      AssignmentExpressionTree assignment = (AssignmentExpressionTree) nonParenthesisParent;
-		      if (assignment.variable().equals(previousTree)) {
-		        return Optional.of(assignment);
-		      }
-		    }
-		    return Optional.empty();
-		  }
-		  @CheckForNull
-		  public static ExpressionTree getInitializerOrExpression(@Nullable Tree tree) {
-		    if (tree == null) {
-		      return null;
-		    }
-		    if (tree.is(Tree.Kind.VARIABLE)) {
-		      return ((VariableTree) tree).initializer();
-		    } else if (tree.is(Tree.Kind.ENUM_CONSTANT)) {
-		      return ((EnumConstantTree) tree).initializer();
-		    } else if (tree instanceof AssignmentExpressionTree) {
-		      // All kinds of Assignment
-		      return ((AssignmentExpressionTree) tree).expression();
-		    }
-		    // Can be other declaration, like class
-		    return null;
-		  }
+		while (nonParenthesisParent.is(Tree.Kind.PARENTHESIZED_EXPRESSION)) {
+			previousTree = nonParenthesisParent;
+			nonParenthesisParent = previousTree.parent();
+		}
+
+		if (nonParenthesisParent instanceof AssignmentExpressionTree) {
+			AssignmentExpressionTree assignment = (AssignmentExpressionTree) nonParenthesisParent;
+			if (assignment.variable().equals(previousTree)) {
+				return Optional.of(assignment);
+			}
+		}
+		return Optional.empty();
+	}
+
+	@CheckForNull
+	public static ExpressionTree getInitializerOrExpression(@Nullable Tree tree) {
+		if (tree == null) {
+			return null;
+		}
+		if (tree.is(Tree.Kind.VARIABLE)) {
+			return ((VariableTree) tree).initializer();
+		} else if (tree.is(Tree.Kind.ENUM_CONSTANT)) {
+			return ((EnumConstantTree) tree).initializer();
+		} else if (tree instanceof AssignmentExpressionTree) {
+			// All kinds of Assignment
+			return ((AssignmentExpressionTree) tree).expression();
+		}
+		// Can be other declaration, like class
+		return null;
+	}
 }

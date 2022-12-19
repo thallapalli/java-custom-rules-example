@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
+import org.sonar.java.checks.SQLInjectionCheck;
 import org.sonar.plugins.java.api.JavaCheck;
 import org.sonar.samples.java.checks.AvoidAnnotationRule;
 import org.sonar.samples.java.checks.AvoidBrandInMethodNamesRule;
@@ -47,6 +49,7 @@ public final class RulesList {
       MyCustomSubscriptionRule.class,
       CMICSQLInjectionCheckCustomRule.class,
       MyFirstCustomCheck.class,
+     
       SecurityAnnotationMandatoryRule.class));
   }
 
